@@ -6,7 +6,7 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            Text("My Utilities")
+            Text("My Shortcuts Utilities")
                         .font(.largeTitle)
                         .bold()
                         .multilineTextAlignment(.center)
