@@ -39,15 +39,26 @@ struct GetTodayHealthIntent: AppIntent {
             }
 
             let metrics = try await manager.getMetrics(for: targetDate)
-            let weightRounded = String(format: "%.1f", Double(round(metrics.weight * 10) / 10))
+            
+            print(metrics)
+            
+            // 값이 없을때 단축어의
+            let exerciseDisplay = metrics.exerciseTime == 0 ? "데이터 없음" : formatMinutesToHHMM(metrics.exerciseTime)
+            let sleepDisplay = metrics.sleepTime == 0 ? "데이터 없음" : formatMinutesToHHMM(metrics.sleepTime)
+            let weightDisplay = metrics.weight == 0 ? "데이터 없음" : String(format: "%.1f", Double(round(metrics.weight * 10) / 10))
+            let dietaryDisplay = metrics.dietaryEnergy == 0 ? "데이터 없음" : String(format: "%.0f", metrics.dietaryEnergy)
+            let stateDisplay = metrics.stateOfMind == "Unknown" ? "데이터 없음" : metrics.stateOfMind
 
             let payload: [String:Any] = [
                 "date": dateString,
                 "exerciseTime": formatMinutesToHHMM(metrics.exerciseTime),
                 "sleepTime": formatMinutesToHHMM(metrics.sleepTime),
-                "weight": weightRounded,
+                "weight": String(format: "%.1f", Double(round(metrics.weight * 10) / 10)),
+                "dietaryEnergy": String(format: "%.0f", metrics.dietaryEnergy),
                 "stateOfMind": metrics.stateOfMind
             ]
+            
+            print("▶︎ Payload JSON:", payload)
 
             let data = try JSONSerialization.data(withJSONObject: payload, options: .prettyPrinted)
             return .result(value: String(data: data, encoding: .utf8)!)

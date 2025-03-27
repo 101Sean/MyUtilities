@@ -5,6 +5,7 @@ struct TodayHealthMetrics {
     let exerciseTime: Double
     let sleepTime: Double
     let weight: Double
+    let dietaryEnergy: Double
     let stateOfMind: String
 }
 
@@ -21,7 +22,8 @@ class HealthDataManager: ObservableObject {
         var read: Set<HKObjectType> = [
             HKQuantityType.quantityType(forIdentifier: .appleExerciseTime)!,
             HKCategoryType.categoryType(forIdentifier: .sleepAnalysis)!,
-            HKQuantityType.quantityType(forIdentifier: .bodyMass)!
+            HKQuantityType.quantityType(forIdentifier: .bodyMass)!,
+            HKQuantityType.quantityType(forIdentifier: .dietaryEnergyConsumed)!
         ]
 
         if #available(iOS 17.0, *) {
@@ -38,84 +40,121 @@ class HealthDataManager: ObservableObject {
         async let ex = fetchExerciseTime(on: date)
         async let sl = fetchSleepTime(on: date)
         async let wt = fetchWeight(on: date)
+        async let diet = fetchDietaryEnergy(on: date)
         async let mind = fetchStateOfMind(on: date)
 
         return TodayHealthMetrics(
             exerciseTime: try await ex,
             sleepTime: try await sl,
             weight: try await wt,
+            dietaryEnergy: try await diet,
             stateOfMind: try await mind
         )
     }
 
     // Fetchers
     private func fetchExerciseTime(on date: Date) async throws -> Double {
-        return try await queryStatistics(
-            type: HKQuantityType.quantityType(forIdentifier: .appleExerciseTime)!,
-            predicate: dailyPredicate(for: date),
-            unit: HKUnit.minute()
-        )
+        do {
+            return try await queryStatistics(
+                type: HKQuantityType.quantityType(forIdentifier: .appleExerciseTime)!,
+                predicate: dailyPredicate(for: date),
+                unit: HKUnit.minute()
+            )
+        } catch {
+            print("Error fetching exercise time: \(error)")
+            return 0
+        }
     }
 
     private func fetchSleepTime(on date: Date) async throws -> Double {
-        let sleepType = HKCategoryType.categoryType(forIdentifier: .sleepAnalysis)!
-        let samples = try await querySamples(type: sleepType, predicate: dailyPredicate(for: date))
+        do {
+            let sleepType = HKCategoryType.categoryType(forIdentifier: .sleepAnalysis)!
+            let samples = try await querySamples(type: sleepType, predicate: dailyPredicate(for: date))
 
-        return samples.reduce(0) { total, sample in
-            guard let cat = sample as? HKCategorySample else { return total }
+            return samples.reduce(0) { total, sample in
+                guard let cat = sample as? HKCategorySample else { return total }
 
-            switch cat.value {
-            case HKCategoryValueSleepAnalysis.asleepCore.rawValue,
-                 HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
-                 HKCategoryValueSleepAnalysis.asleepREM.rawValue,
-                 HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue:
+                switch cat.value {
+                case HKCategoryValueSleepAnalysis.asleepCore.rawValue,
+                     HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
+                     HKCategoryValueSleepAnalysis.asleepREM.rawValue,
+                     HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue:
 
-                let start = max(cat.startDate, Calendar.current.startOfDay(for: date))
-                let end = min(cat.endDate, Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: date))!)
-                return total + max(end.timeIntervalSince(start), 0) / 60
+                    let start = max(cat.startDate, Calendar.current.startOfDay(for: date))
+                    let end = min(cat.endDate, Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: date))!)
+                    return total + max(end.timeIntervalSince(start), 0) / 60
 
-            default:
-                return total
+                default:
+                    return total
+                }
             }
+        } catch {
+            print("Error fetching sleep time: \(error)")
+            return 0
         }
     }
 
     private func fetchWeight(on date: Date) async throws -> Double {
-        let type = HKQuantityType.quantityType(forIdentifier: .bodyMass)!
-        let sort = [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)]
+        do {
+            let type = HKQuantityType.quantityType(forIdentifier: .bodyMass)!
+            let sort = [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)]
 
-        let daily = try await querySamples(
-            type: type,
-            predicate: dailyPredicate(for: date),
-            limit: 1,
-            sortDescriptors: sort
-        )
-        if let sample = daily.first as? HKQuantitySample {
-            return sample.quantity.doubleValue(for: HKUnit.gramUnit(with: .kilo))
+            let daily = try await querySamples(
+                type: type,
+                predicate: dailyPredicate(for: date),
+                limit: 1,
+                sortDescriptors: sort
+            )
+            if let sample = daily.first as? HKQuantitySample {
+                return sample.quantity.doubleValue(for: HKUnit.gramUnit(with: .kilo))
+            }
+
+            let fallback = try await querySamples(
+                type: type,
+                predicate: HKQuery.predicateForSamples(withStart: nil, end: Date(), options: []),
+                limit: 1,
+                sortDescriptors: sort
+            )
+            guard let latest = fallback.first as? HKQuantitySample else { return 0.0 }
+            return latest.quantity.doubleValue(for: HKUnit.gramUnit(with: .kilo))
+        } catch {
+            print("Error fetching weight: \(error)")
+            return 0
         }
-
-        let fallback = try await querySamples(
-            type: type,
-            predicate: HKQuery.predicateForSamples(withStart: nil, end: Date(), options: []),
-            limit: 1,
-            sortDescriptors: sort
-        )
-        guard let latest = fallback.first as? HKQuantitySample else { return 0.0 }
-        return latest.quantity.doubleValue(for: HKUnit.gramUnit(with: .kilo))
+    }
+    
+    private func fetchDietaryEnergy(on date: Date) async throws -> Double {
+        do {
+            let type = HKQuantityType.quantityType(forIdentifier: .dietaryEnergyConsumed)!
+            let unit = HKUnit.kilocalorie()
+            return try await queryStatistics(
+                type: type,
+                predicate: dailyPredicate(for: date),
+                unit: unit
+            )
+        } catch {
+            print("Error fetching dietary energy: \(error)")
+            return 0
+        }
     }
 
     private func fetchStateOfMind(on date: Date) async throws -> String {
         guard #available(iOS 17.0, *) else { return "Unknown" }
-        let sort = [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)]
-        let samples = try await querySamples(
-            type: HKCategoryType.stateOfMindType(),
-            predicate: dailyPredicate(for: date),
-            limit: 1,
-            sortDescriptors: sort
-        )
-        guard let sample = samples.first as? HKStateOfMind,
-              let label = sample.labels.first else { return "Unknown" }
-        return label.displayName
+        do {
+            let sort = [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)]
+            let samples = try await querySamples(
+                type: HKCategoryType.stateOfMindType(),
+                predicate: dailyPredicate(for: date),
+                limit: 1,
+                sortDescriptors: sort
+            )
+            guard let sample = samples.first as? HKStateOfMind,
+                  let label = sample.labels.first else { return "Unknown" }
+            return label.displayName
+        } catch {
+            print("Error fetching state of mind: \(error)")
+            return "Unknown"
+        }
     }
 
     // Helpers
