@@ -4,3 +4,12 @@
 ---
 
 #### v1.2
+##### CSV to JSON 변환 동작 추가
+
+
+#### v1.3
+##### Apple Health Kit을 이용한 건강 데이터 수집 동작 추가
+
+
+#### v1.4
+##### Image Ascii Art 변환 동작 추가
