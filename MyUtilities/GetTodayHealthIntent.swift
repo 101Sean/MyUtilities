@@ -42,7 +42,7 @@ struct GetTodayHealthIntent: AppIntent {
             
             print(metrics)
             
-            // 값이 없을때 단축어의
+            // 값이 없을때 
             let exerciseDisplay = metrics.exerciseTime == 0 ? "데이터 없음" : formatMinutesToHHMM(metrics.exerciseTime)
             let sleepDisplay = metrics.sleepTime == 0 ? "데이터 없음" : formatMinutesToHHMM(metrics.sleepTime)
             let weightDisplay = metrics.weight == 0 ? "데이터 없음" : String(format: "%.1f", Double(round(metrics.weight * 10) / 10))
